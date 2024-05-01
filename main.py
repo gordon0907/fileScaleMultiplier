@@ -26,8 +26,16 @@ class NumberFile:
         self.decimal_pt_idx: int = -1
 
     @property
+    def decimal_pt_exists(self) -> bool:
+        return self.decimal_pt_idx != -1
+
+    @property
+    def num_digits(self) -> int:
+        return self.size - self.decimal_pt_exists
+
+    @property
     def num_decimal_places(self) -> int:
-        return self.size - (self.decimal_pt_idx + 1) if self.decimal_pt_idx != -1 else 0
+        return self.size - (self.decimal_pt_idx + 1) if self.decimal_pt_exists else 0
 
     def read_chunks(self, chunk_size: int) -> str:
         """
@@ -96,7 +104,7 @@ class NumberFile:
 
             if '.' in data_chunk_char_set:
                 # Constraint 3
-                if self.decimal_pt_idx == -1 and data_chunk.count('.') == 1:
+                if not self.decimal_pt_exists and data_chunk.count('.') == 1:
                     self.decimal_pt_idx = chunk_size * i + data_chunk.index('.')
                 else:
                     raise AssertionError("The file should not contain more than one '.'.")
@@ -155,7 +163,7 @@ class FileScaleMultiplier:
                 # Ensure start_idx >= 0
                 start_idx = max(0, start_idx)
 
-                data_chunk = file.slice(start_idx, end_idx)
+                data_chunk = file.slice(start_idx, end_idx)  # file[start_idx:end_idx]
                 queue.put(data_chunk.replace('.', '') if contain_decimal_pt else data_chunk)
 
             queue.put(None)
@@ -170,7 +178,7 @@ class FileScaleMultiplier:
         ]
 
         # Calculate the number of chunks for each input file (excluding the decimal point)
-        num_chunks_list = [ceil((file.size - (file.decimal_pt_idx != -1)) / self.chunk_size) for file in self.files]
+        num_chunks_list = [ceil(file.num_digits / self.chunk_size) for file in self.files]
 
         """
         Illustration of the multiplication process, where [i] represents the i-th chunk.
@@ -299,7 +307,7 @@ class FileScaleMultiplier:
             file.validate(chunk_size=self.chunk_size)
 
         # Ensure the multiplicand is longer
-        self.files.sort(key=lambda file_: file_.size - (file_.decimal_pt_idx != -1), reverse=True)
+        self.files.sort(key=lambda file_: file_.num_digits, reverse=True)
 
         # Multiply two files chunk by chunk
         self.multiply()
