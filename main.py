@@ -6,6 +6,7 @@ from threading import Thread
 
 import numpy as np
 from gmpy2 import mpz
+from numpy.lib.stride_tricks import sliding_window_view
 
 
 class NumberFile:
@@ -162,30 +163,55 @@ class FileScaleMultiplier:
         # Calculate the number of chunks for each input file (excluding the decimal point)
         num_chunks_list = [ceil((file.size - (file.decimal_pt_idx != -1)) / self.chunk_size) for file in self.files]
 
-        # Record the index of the target multiplicand chunk for the multiplier chunks
-        target_chunk_idx_arr = -np.arange(num_chunks_list[1])
+        """
+        Illustration of the multiplication process, where [i] represents the i-th chunk.
+        Assume the multiplicand has M chunks and the multiplier has N chunks, with M >= N.
 
+        [1st iteration]
+            multiplicand: ... [3] [2] [1] [0]
+            multiplier:                   [0] [1] [2] ...
+
+        [2nd iteration]
+            multiplicand: ... [3] [2] [1] [0]
+            multiplier:               [0] [1] [2] ...
+
+        ...
+
+        [Last iteration]
+            multiplicand:           [M - 1] [M - 2] [M - 3] ...
+            multiplier: ... [N - 2] [N - 1]
+            
+        ------------------------------------------------------------
+        
+        For convenience, the actual implementation is in reverse order:
+            multiplicand:                       [0] [1] [2] ... [M - 2] [M - 1]
+            multiplier: [N - 1] [N - 2] ... [1] [0]
+        """
+
+        # Create arrays containing indices of all chunks for the multiplicand and multiplier
+        multiplicand_indices = np.arange(num_chunks_list[0])
+        multiplier_indices = np.arange(num_chunks_list[1])[::-1]
+
+        # Pad `multiplicand_idx_arr` with -1 for the sliding window approach
+        multiplicand_indices = np.pad(multiplicand_indices, num_chunks_list[1] - 1, constant_values=-1)
+
+        # Calculate the result, one chunk per iteration
         i, carry = 0, 0
-        while (target_chunk_idx_arr < num_chunks_list[0]).any():
-            valid_multiplier_mask = (0 <= target_chunk_idx_arr) & (target_chunk_idx_arr < num_chunks_list[0])
-            valid_multiplier_idx_arr = np.where(valid_multiplier_mask)[
-                0]  # The indexes are always contiguous and in ascending order
-            multiplier_start_chunk = valid_multiplier_idx_arr[0]
-            multiplier_end_chunk = valid_multiplier_idx_arr[-1]
-
-            multiplicand_start_chunk = target_chunk_idx_arr[valid_multiplier_mask][0]
-            multiplicand_end_chunk = target_chunk_idx_arr[valid_multiplier_mask][-1]
+        for i, multiplicand_idx_slide in enumerate(sliding_window_view(multiplicand_indices,
+                                                                       window_shape=num_chunks_list[1])):
+            # Filter out padded elements, i.e., elements with -1
+            target_multiplicand_idx = multiplicand_idx_slide[multiplicand_idx_slide != -1]
+            target_multiplier_idx = multiplier_indices[multiplicand_idx_slide != -1]
 
             # Start threads to concurrently fetch chunk data into the queue
-            Thread(target=prefetch_thread, args=(1, multiplier_start_chunk, multiplier_end_chunk), daemon=True).start()
-            Thread(target=prefetch_thread, args=(0, multiplicand_start_chunk, multiplicand_end_chunk),
-                   daemon=True).start()
+            Thread(target=prefetch_thread, args=(0, *target_multiplicand_idx[[0, -1]]), daemon=True).start()
+            Thread(target=prefetch_thread, args=(1, *target_multiplier_idx[[0, -1]]), daemon=True).start()
 
             # Get chunk pairs from the queues and multiply them
             chunk_product_sum = carry
-            for multiplicand_chunk_str, multiplier_chunk_str in zip_longest(
+            for multiplicand_chunk, multiplier_chunk in zip_longest(
                     *[iter(buffer_queue.get, None) for buffer_queue in buffer_queues]):
-                chunk_product_sum += mpz(multiplicand_chunk_str) * mpz(multiplier_chunk_str)
+                chunk_product_sum += mpz(multiplicand_chunk) * mpz(multiplier_chunk)  # type(chunk) == str
 
             quotient, remainder = divmod(chunk_product_sum, mpz(10) ** self.chunk_size)
             carry = quotient
@@ -194,11 +220,8 @@ class FileScaleMultiplier:
                 f.write(str(remainder).zfill(self.chunk_size))
                 print("Written:", f.name)
 
-            target_chunk_idx_arr += 1
-            i += 1
-
         if carry:
-            with open(f"./tmp/{i:08d}.chunk", 'w') as f:
+            with open(f"./tmp/{i + 1:08d}.chunk", 'w') as f:
                 f.write(str(carry))
                 print("Written:", f.name)
 
