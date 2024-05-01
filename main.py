@@ -54,6 +54,13 @@ class NumberFile:
             yield data_chunk
 
     def slice(self, start: int, end: int) -> str:
+        """
+        Return a slice of the file similar to slicing a string in Python, i.e., data[start:end].
+
+        :param start: An integer, which can be negative, representing the starting index of the slice.
+        :param end: An integer, which can be negative, representing the ending index of the slice, exclusive.
+        :return: A string containing the specified slice of the file.
+        """
         if start < 0:
             start += self.size
         if end < 0:
