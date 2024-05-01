@@ -27,7 +27,7 @@ class NumberFile:
 
     def read_chunks(self, chunk_size: int) -> str:
         """
-        A generator function reads the file sequentially and yields data chunks
+        A generator function reads the file sequentially and yields data chunks.
         """
         with open(self.filepath, 'r') as f:
             while data_chunk := f.read(chunk_size):
@@ -68,7 +68,7 @@ class NumberFile:
 
     def validate(self, chunk_size) -> None:
         """
-        Check if the file conforms to the constraints, and get 'num_decimal_places' by the way.
+        Check if the file conforms to the constraints, and get `num_decimal_places` by the way.
         """
         valid_char_set = set(map(str, range(10)))
         valid_char_set.add('.')
@@ -109,13 +109,13 @@ class FileScaleMultiplier:
     def multiply(self):
         def prefetch_thread(file_idx, start_chunk, end_chunk):
             """
-            A thread function fetches data chunks and puts them into a queue.
+            A thread function that fetches data chunks and puts them into a queue.
             The decimal point is removed automatically.
 
             :param file_idx: The index of the file to be read.
-            :param start_chunk: An index within [0, num_chunks), where 0 represents the first chunk when counting from
-            the end of the file.
-            :param end_chunk: Same logic as 'start_chunk', and the 'end_chunk' is also included in the output.
+            :param start_chunk: An index within [0, num_chunks), where 0 represents the first chunk starting from the
+            end of the file. If `start_chunk` > `end_chunk`, the returned chunks will be in reverse (descending) order.
+            :param end_chunk: Uses the same logic as `start_chunk`. The `end_chunk` is inclusive in the output.
             """
             # Create aliases to improve readability
             file = self.files[file_idx]
@@ -181,6 +181,7 @@ class FileScaleMultiplier:
             Thread(target=prefetch_thread, args=(0, multiplicand_start_chunk, multiplicand_end_chunk),
                    daemon=True).start()
 
+            # Get chunk pairs from the queues and multiply them
             chunk_product_sum = carry
             for multiplicand_chunk_str, multiplier_chunk_str in zip_longest(
                     *[iter(buffer_queue.get, None) for buffer_queue in buffer_queues]):
@@ -261,7 +262,7 @@ class FileScaleMultiplier:
                 print("Removed:", filepath)
 
     def main(self):
-        # Validate input files and get 'num_decimal_places'
+        # Validate input files and get `num_decimal_places`
         for file in self.files:
             file.validate(chunk_size=self.chunk_size)
 
