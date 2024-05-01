@@ -24,7 +24,10 @@ class NumberFile:
         self.size: int = os.path.getsize(self.filepath)
 
         self.decimal_pt_idx: int = -1
-        self.num_decimal_places: int = -1
+
+    @property
+    def num_decimal_places(self) -> int:
+        return self.size - (self.decimal_pt_idx + 1) if self.decimal_pt_idx != -1 else 0
 
     def read_chunks(self, chunk_size: int) -> str:
         """
@@ -69,7 +72,7 @@ class NumberFile:
 
     def validate(self, chunk_size) -> None:
         """
-        Check if the file conforms to the constraints, and get `num_decimal_places` by the way.
+        Check if the file conforms to the constraints, and retrieve `decimal_pt_idx` if there is a decimal place.
         """
         valid_char_set = set(map(str, range(10)))
         valid_char_set.add('.')
@@ -86,11 +89,10 @@ class NumberFile:
 
             if '.' in data_chunk_char_set:
                 # Constraint 3
-                self.decimal_pt_idx = chunk_size * i + data_chunk.index('.')
-                if self.num_decimal_places != -1 or '.' in data_chunk[self.decimal_pt_idx + 1:]:
+                if self.decimal_pt_idx == -1 and data_chunk.count('.') == 1:
+                    self.decimal_pt_idx = chunk_size * i + data_chunk.index('.')
+                else:
                     raise AssertionError("The file should not contain more than one '.'.")
-
-                self.num_decimal_places = self.size - (self.decimal_pt_idx + 1)
 
 
 class FileScaleMultiplier:
@@ -236,7 +238,7 @@ class FileScaleMultiplier:
         total_num_digits = sum(os.path.getsize(filepath) for filepath in intermediate_filepaths)
 
         # Calculate the number of decimal places in the result
-        result_num_decimal_places = sum(file.num_decimal_places for file in self.files if file.num_decimal_places != -1)
+        result_num_decimal_places = sum(file.num_decimal_places for file in self.files)
 
         # Fix an edge case, e.g., 0.1 * 0.1
         if result_num_decimal_places > total_num_digits:
@@ -285,7 +287,7 @@ class FileScaleMultiplier:
                 print("Removed:", filepath)
 
     def main(self):
-        # Validate input files and get `num_decimal_places`
+        # Read and validate input files
         for file in self.files:
             file.validate(chunk_size=self.chunk_size)
 
