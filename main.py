@@ -209,7 +209,7 @@ class FileScaleMultiplier:
         multiplicand_indices = np.arange(num_chunks_list[0])
         multiplier_indices = np.arange(num_chunks_list[1])[::-1]
 
-        # Pad `multiplicand_idx_arr` with -1 for the sliding window approach
+        # Pad `multiplicand_indices` with -1 for the sliding window approach
         multiplicand_indices = np.pad(multiplicand_indices, num_chunks_list[1] - 1, constant_values=-1)
 
         # Calculate the result, one chunk per iteration
